@@ -1,5 +1,8 @@
 # HIPAA-Bridge
 
+[![CI](https://github.com/likitha-shankar/hipaa-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/likitha-shankar/hipaa-bridge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 Local clinical text de-identification with **reversible, deterministic tokens**. Strip PHI before text leaves your machine; restore it in the response — locally. The token↔value vault never leaves your network.
 
 ```
@@ -22,6 +25,12 @@ Local clinical text de-identification with **reversible, deterministic tokens**.
 ```bash
 docker compose up                      # bridge at http://localhost:8484
 docker compose --profile ai up         # + bundled Ollama: fully local, $0
+```
+
+Or pull the pre-built image (published to GHCR on every push to `main`):
+
+```bash
+docker run -p 8484:8484 -v hipaa-bridge-data:/data ghcr.io/likitha-shankar/hipaa-bridge:main
 ```
 
 Or without Docker:
