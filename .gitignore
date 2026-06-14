@@ -1,0 +1,20 @@
+# env / build
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
+
+# runtime artifacts — never commit the vault or config (contain PHI mappings/keys)
+*.db
+hipaa_bridge_config.json
+in/
+out/
+
+# misc
+.DS_Store
+.env
+
+# tooling runtime state
+.claude-flow/
+.claude/

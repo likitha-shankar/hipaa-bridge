@@ -1,0 +1,24 @@
+services:
+  hipaa-bridge:
+    build: .
+    ports:
+      - "8484:8484"
+    volumes:
+      - bridge-data:/data      # vault + config survive restarts
+      - ./in:/work/in          # watch-folder input (optional)
+      - ./out:/work/out        # watch-folder output (optional)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach Ollama on the host (Linux)
+
+  # Optional: fully local AI in the same stack. `docker compose --profile ai up`
+  ollama:
+    image: ollama/ollama
+    profiles: ["ai"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  bridge-data:
+  ollama-models:

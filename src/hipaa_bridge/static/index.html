@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HIPAA-Bridge</title>
+<style>
+  :root { --ink:#1d2733; --paper:#f6f4ef; --card:#ffffff; --accent:#0e7c66; --accent2:#b9542e; --line:#d9d4c8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.55 Georgia, 'Times New Roman', serif; color:var(--ink); background:var(--paper); }
+  header { padding:1.1rem 2rem; border-bottom:2px solid var(--ink); display:flex; align-items:baseline; gap:1rem; }
+  header h1 { font-size:1.35rem; margin:0; letter-spacing:.02em; }
+  header .sub { color:#5a6470; font-style:italic; font-size:.95rem; }
+  main { max-width:880px; margin:2rem auto; padding:0 1.25rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1.5rem; margin-bottom:1.5rem; box-shadow:0 1px 3px rgba(29,39,51,.06); }
+  h2 { margin:0 0 .75rem; font-size:1.1rem; }
+  label { display:block; margin:.9rem 0 .25rem; font-weight:bold; font-size:.92rem; }
+  input[type=text], input[type=password], textarea, select {
+    width:100%; padding:.6rem .7rem; border:1px solid var(--line); border-radius:6px;
+    font:15px/1.4 ui-monospace, Menlo, monospace; background:#fcfbf8; color:var(--ink);
+  }
+  textarea { min-height:130px; resize:vertical; }
+  .radio-row { display:flex; gap:.65rem; flex-wrap:wrap; margin-top:.4rem; }
+  .radio-row label { flex:1 1 180px; margin:0; border:1.5px solid var(--line); border-radius:8px;
+    padding:.8rem; cursor:pointer; font-weight:normal; }
+  .radio-row label.sel { border-color:var(--accent); background:#eef7f4; }
+  .radio-row b { display:block; margin-bottom:.2rem; }
+  .radio-row small { color:#5a6470; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:.65rem 1.3rem;
+    font:bold 15px Georgia, serif; cursor:pointer; margin-top:1rem; }
+  button.alt { background:transparent; color:var(--accent); border:1.5px solid var(--accent); }
+  button:disabled { opacity:.5; cursor:wait; }
+  .out { white-space:pre-wrap; background:#fcfbf8; border:1px dashed var(--line); border-radius:6px;
+    padding:.8rem; margin-top:.8rem; font:14px/1.5 ui-monospace, Menlo, monospace; min-height:2.2rem; }
+  .pill { display:inline-block; background:#eef7f4; color:var(--accent); border-radius:99px;
+    padding:.1rem .6rem; font-size:.8rem; margin:.15rem .2rem 0 0; font-family:ui-monospace, Menlo, monospace; }
+  .warn { color:var(--accent2); font-size:.9rem; }
+  nav { margin-bottom:1.25rem; display:flex; gap:.5rem; }
+  nav button { margin:0; }
+  nav button.inactive { background:#e7e2d6; color:var(--ink); }
+  .muted { color:#5a6470; font-size:.9rem; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>HIPAA-Bridge</h1>
+  <span class="sub">de-identify locally &middot; nothing sensitive leaves this machine</span>
+</header>
+<main>
+
+<!-- ======================= SETUP WIZARD ======================= -->
+<section id="wizard" class="card hidden">
+  <h2>First-run setup</h2>
+  <p class="muted">Pick how (or whether) scrubbed text gets sent to an AI. PHI is replaced with tokens <em>before</em> anything is sent; answers are re-identified locally.</p>
+
+  <label>AI backend</label>
+  <div class="radio-row" id="modeRow">
+    <label data-mode="ollama"><b>Local AI (Ollama)</b><small>Free forever. Runs on this machine. Needs <code>ollama serve</code>.</small></label>
+    <label data-mode="api"><b>API endpoint</b><small>Paste any OpenAI-compatible URL + key (Groq, Gemini, OpenRouter free tiers&hellip;).</small></label>
+    <label data-mode="none"><b>No AI — scrub only</b><small>Just de-identify and restore. Use exports with any tool you like.</small></label>
+  </div>
+
+  <div id="backendFields">
+    <label for="backendUrl">Backend URL</label>
+    <input type="text" id="backendUrl" value="http://localhost:11434">
+    <label for="apiKey">API key <span class="muted">(leave blank for Ollama)</span></label>
+    <input type="password" id="apiKey" placeholder="sk-...">
+    <label for="model">Model name</label>
+    <input type="text" id="model" value="llama3.2">
+  </div>
+
+  <label><input type="checkbox" id="useNer" checked> Use spaCy NER for names (recommended) <span id="nerWarn" class="warn hidden">— spaCy not installed; regex-only until you install it</span></label>
+
+  <button id="saveSetup">Save &amp; start</button>
+</section>
+
+<!-- ======================= WORKBENCH ======================= -->
+<section id="bench" class="hidden">
+  <nav>
+    <button id="tabScrub">Scrub &amp; Ask</button>
+    <button id="tabAudit" class="inactive">Audit</button>
+    <button id="tabSetup" class="inactive">Settings</button>
+  </nav>
+
+  <div class="card" id="paneScrub">
+    <h2>Clinical text</h2>
+    <textarea id="inText" placeholder="Paste a clinical note, message, or report&hellip;"></textarea>
+    <button id="btnScrub" class="alt">Scrub only</button>
+    <button id="btnAsk">Scrub &rarr; AI &rarr; Restore</button>
+
+    <div id="scrubBlock" class="hidden">
+      <label>De-identified (this is all the AI ever sees)</label>
+      <div class="out" id="scrubOut"></div>
+      <div id="pills"></div>
+    </div>
+    <div id="answerBlock" class="hidden">
+      <label>Answer (re-identified locally)</label>
+      <div class="out" id="answerOut"></div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="paneAudit">
+    <h2>Vault audit</h2>
+    <p class="muted">Counts of stored token mappings by category. Values never leave this machine.</p>
+    <div class="out" id="auditOut"></div>
+  </div>
+</section>
+
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let cfg = null, mode = "ollama";
+
+async function api(path, body) {
+  const r = await fetch(path, body
+    ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}
+    : undefined);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+function pickMode(m) {
+  mode = m;
+  document.querySelectorAll("#modeRow label").forEach(l =>
+    l.classList.toggle("sel", l.dataset.mode === m));
+  $("backendFields").classList.toggle("hidden", m === "none");
+  if (m === "ollama") { $("backendUrl").value = "http://localhost:11434"; $("model").value = "llama3.2"; }
+}
+document.querySelectorAll("#modeRow label").forEach(l =>
+  l.onclick = () => pickMode(l.dataset.mode));
+
+$("saveSetup").onclick = async () => {
+  await api("/api/config", {
+    mode, backend_url: $("backendUrl").value, api_key: $("apiKey").value,
+    model: $("model").value, use_ner: $("useNer").checked,
+  });
+  location.reload();
+};
+
+$("btnScrub").onclick = async () => {
+  const j = await api("/api/scrub", {text: $("inText").value});
+  $("scrubOut").textContent = j.text;
+  $("pills").innerHTML = j.replacements.map(r => `<span class="pill">${r.category}</span>`).join("");
+  $("scrubBlock").classList.remove("hidden");
+  $("answerBlock").classList.add("hidden");
+};
+
+$("btnAsk").onclick = async () => {
+  $("btnAsk").disabled = true;
+  try {
+    const j = await api("/api/ask", {text: $("inText").value});
+    $("scrubOut").textContent = j.scrubbed_prompt;
+    $("pills").innerHTML = `<span class="pill">${j.scrubbed_count} item(s) tokenized</span>`;
+    $("answerOut").textContent = j.answer;
+    $("scrubBlock").classList.remove("hidden");
+    $("answerBlock").classList.remove("hidden");
+  } catch (e) { alert(e.message); }
+  $("btnAsk").disabled = false;
+};
+
+function showPane(which) {
+  $("paneScrub").classList.toggle("hidden", which !== "scrub");
+  $("paneAudit").classList.toggle("hidden", which !== "audit");
+  $("tabScrub").classList.toggle("inactive", which !== "scrub");
+  $("tabAudit").classList.toggle("inactive", which !== "audit");
+}
+$("tabScrub").onclick = () => showPane("scrub");
+$("tabAudit").onclick = async () => {
+  showPane("audit");
+  const j = await api("/api/audit");
+  $("auditOut").textContent = Object.entries(j.categories)
+    .map(([c, n]) => `${c.padEnd(12)} ${n}`).join("\n") + `\n${"TOTAL".padEnd(12)} ${j.total}`;
+};
+$("tabSetup").onclick = () => { $("wizard").classList.remove("hidden"); $("bench").classList.add("hidden"); };
+
+(async () => {
+  cfg = await api("/api/config");
+  if (!cfg.ner_available) $("nerWarn").classList.remove("hidden");
+  if (cfg.setup_complete) {
+    $("bench").classList.remove("hidden");
+    if (cfg.mode === "none") $("btnAsk").classList.add("hidden");
+  } else {
+    $("wizard").classList.remove("hidden");
+    pickMode("ollama");
+  }
+})();
+</script>
+</body>
+</html>
